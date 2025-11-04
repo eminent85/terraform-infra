@@ -24,6 +24,7 @@ on:
 
 jobs:
   deploy-dev:
+    environment: dev
     name: Deploy Dev Environment
     uses: ./.github/workflows/terraform-deploy.yml
     permissions:
