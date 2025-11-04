@@ -6,7 +6,7 @@ This module creates a bastion host (jump box) for accessing GKE clusters and oth
 
 - Bastion VM with IAM service account
 - OS Login enabled for SSH access
-- Pre-installed tools: kubectl, gcloud, helm, istioctl
+- Pre-installed tools: kubectl, gcloud, helm, istioctl, fluxcdcli
 - Optional external IP with firewall rules
 - IAP (Identity-Aware Proxy) SSH support by default
 - Shielded VM with Secure Boot and Integrity Monitoring

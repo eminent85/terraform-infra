@@ -1,6 +1,6 @@
 # GitHub Actions Workflows for Terraform Infrastructure
 
-This directory contains GitHub Actions workflows for managing long-lived GCP infrastructure across multiple environments (dev, staging, prod).
+This directory contains GitHub Actions workflows for managing both long-lived GCP infrastructure (dev, staging, prod) and ephemeral test environments for CI/CD pipelines.
 
 ## Overview
 
@@ -10,21 +10,92 @@ The workflow structure uses reusable workflows to ensure consistency across envi
 
 ```
 Reusable Workflows (Core Logic):
-├── terraform-deploy.yml    # Handles terraform plan and apply
-└── terraform-destroy.yml   # Handles terraform destroy operations
+├── terraform-deploy.yml              # Handles terraform plan and apply (long-lived)
+├── terraform-destroy.yml             # Handles terraform destroy operations (long-lived)
+├── reusable-ephemeral-deploy.yml    # Deploy ephemeral test environments (callable)
+└── reusable-ephemeral-destroy.yml   # Destroy ephemeral test environments (callable)
 
-Environment-Specific Workflows (Triggers):
+Long-Lived Environment Workflows:
 ├── dev-deploy.yml          # Deploy to dev environment
 ├── dev-destroy.yml         # Destroy dev environment
 ├── staging-deploy.yml      # Deploy to staging environment
 ├── staging-destroy.yml     # Destroy staging environment
 ├── prod-deploy.yml         # Deploy to production environment
 └── prod-destroy.yml        # Destroy production environment
+
+Ephemeral Environment Workflows:
+├── ephemeral-deploy.yml    # Manual deploy ephemeral environment
+└── ephemeral-destroy.yml   # Manual destroy ephemeral environment
 ```
 
-## Deployment Workflows
+## Ephemeral Test Environments
 
-### Automatic Deployments
+> **📘 Complete Guide:** See [environments/ephemeral/GITHUB_ACTIONS.md](../../environments/ephemeral/GITHUB_ACTIONS.md) for comprehensive documentation on using ephemeral environments in CI/CD pipelines.
+
+### Quick Start for Application Repos
+
+Application repositories can call the reusable ephemeral workflows for CI/CD testing:
+
+```yaml
+# In your app repo: .github/workflows/pr-test.yml
+name: PR Tests
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy:
+    uses: YOUR-ORG/terraform-infra/.github/workflows/reusable-ephemeral-deploy.yml@main
+    with:
+      environment_name: test-pr-${{ github.event.pull_request.number }}
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+  test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run tests
+        run: |
+          ${{ needs.deploy.outputs.get_credentials_command }}
+          kubectl apply -f k8s/
+          # Run your tests...
+
+  cleanup:
+    needs: [deploy, test]
+    if: always()
+    uses: YOUR-ORG/terraform-infra/.github/workflows/reusable-ephemeral-destroy.yml@main
+    with:
+      environment_name: test-pr-${{ github.event.pull_request.number }}
+      skip_approval: true
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+```
+
+### Required Secrets for Ephemeral Environments
+
+Configure in your repository (for this repo) or application repository (for external usage):
+
+- `GCP_PROJECT_ID` - GCP Project ID for ephemeral environments
+- `GCP_SA_KEY` - Service Account JSON key with permissions to create GKE clusters, VPCs, etc.
+
+### Key Features
+
+- **Cost-Optimized**: Uses preemptible nodes, autoscaling, minimal resources
+- **Fast Provisioning**: Zonal clusters deploy in 5-10 minutes
+- **Isolated**: Each environment gets its own VPC
+- **Auto-Cleanup**: Workflows handle resource cleanup automatically
+- **Flexible**: Configurable node types, counts, and features
+
+---
+
+## Long-Lived Environment Workflows
+
+### Deployment Workflows
+
+#### Automatic Deployments
 
 Deployments are automatically triggered when:
 - Changes are pushed to the `main` branch that affect:
