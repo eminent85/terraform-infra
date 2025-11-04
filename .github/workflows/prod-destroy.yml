@@ -1,0 +1,59 @@
+name: Production Environment - Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "destroy-production-permanently" to confirm'
+        required: true
+        type: string
+      reason:
+        description: 'Reason for destroying production environment'
+        required: true
+        type: string
+      secondary_confirmation:
+        description: 'Type the production project ID to confirm'
+        required: true
+        type: string
+
+jobs:
+  validate-confirmation:
+    name: Validate Destroy Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirmation }}" != "destroy-production-permanently" ]; then
+            echo "::error::Primary confirmation text does not match. Expected 'destroy-production-permanently'"
+            exit 1
+          fi
+          echo "::notice::Primary confirmation validated."
+
+      - name: Check project ID confirmation
+        run: |
+          if [ "${{ inputs.secondary_confirmation }}" != "${{ secrets.PROD_GCP_PROJECT_ID }}" ]; then
+            echo "::error::Project ID confirmation does not match production project ID"
+            exit 1
+          fi
+          echo "::notice::Project ID confirmation validated. Proceeding with destroy."
+
+      - name: Log destroy request
+        run: |
+          echo "::warning::PRODUCTION DESTROY INITIATED"
+          echo "Reason: ${{ inputs.reason }}"
+          echo "Initiated by: ${{ github.actor }}"
+          echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  destroy-prod:
+    name: Destroy Production Environment
+    needs: validate-confirmation
+    uses: ./.github/workflows/terraform-destroy.yml
+    with:
+      environment: prod
+      terraform_version: '1.5.0'
+      working_directory: ./environments/prod
+      require_approval: true
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.PROD_GCP_PROJECT_ID }}
+      GCP_SA_KEY: ${{ secrets.PROD_GCP_SA_KEY }}
+      TF_VAR_project_id: ${{ secrets.PROD_GCP_PROJECT_ID }}

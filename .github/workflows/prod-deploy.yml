@@ -1,0 +1,36 @@
+name: Production Environment - Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'environments/prod/**'
+      - 'modules/gcp/**'
+      - '.github/workflows/prod-deploy.yml'
+      - '.github/workflows/terraform-deploy.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'environments/prod/**'
+      - 'modules/gcp/**'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deployment'
+        required: true
+        type: string
+
+jobs:
+  deploy-prod:
+    name: Deploy Production Environment
+    uses: ./.github/workflows/terraform-deploy.yml
+    with:
+      environment: prod
+      terraform_version: '1.5.0'
+      working_directory: ./environments/prod
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.PROD_GCP_PROJECT_ID }}
+      GCP_SA_KEY: ${{ secrets.PROD_GCP_SA_KEY }}
+      TF_VAR_project_id: ${{ secrets.PROD_GCP_PROJECT_ID }}

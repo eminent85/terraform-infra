@@ -29,3 +29,4 @@ terraform.rc
 # Ignore lock files (optional - some prefer to commit this)
 .terraform.lock.hcl
 **/.claude/*
+CLAUD.md

@@ -1,0 +1,36 @@
+name: Dev Environment - Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'environments/dev/**'
+      - 'modules/gcp/**'
+      - '.github/workflows/dev-deploy.yml'
+      - '.github/workflows/terraform-deploy.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'environments/dev/**'
+      - 'modules/gcp/**'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deployment'
+        required: false
+        type: string
+
+jobs:
+  deploy-dev:
+    name: Deploy Dev Environment
+    uses: ./.github/workflows/terraform-deploy.yml
+    with:
+      environment: dev
+      terraform_version: '1.5.0'
+      working_directory: ./environments/dev
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.DEV_GCP_PROJECT_ID }}
+      GCP_SA_KEY: ${{ secrets.DEV_GCP_SA_KEY }}
+      TF_VAR_project_id: ${{ secrets.DEV_GCP_PROJECT_ID }}

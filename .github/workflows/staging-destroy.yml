@@ -1,0 +1,40 @@
+name: Staging Environment - Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "destroy-staging" to confirm'
+        required: true
+        type: string
+      reason:
+        description: 'Reason for destroying staging environment'
+        required: true
+        type: string
+
+jobs:
+  validate-confirmation:
+    name: Validate Destroy Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirmation }}" != "destroy-staging" ]; then
+            echo "::error::Confirmation text does not match. Expected 'destroy-staging'"
+            exit 1
+          fi
+          echo "::notice::Confirmation validated. Proceeding with destroy."
+
+  destroy-staging:
+    name: Destroy Staging Environment
+    needs: validate-confirmation
+    uses: ./.github/workflows/terraform-destroy.yml
+    with:
+      environment: staging
+      terraform_version: '1.5.0'
+      working_directory: ./environments/staging
+      require_approval: true
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.STAGING_GCP_PROJECT_ID }}
+      GCP_SA_KEY: ${{ secrets.STAGING_GCP_SA_KEY }}
+      TF_VAR_project_id: ${{ secrets.STAGING_GCP_PROJECT_ID }}

@@ -1,0 +1,36 @@
+name: Staging Environment - Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'environments/staging/**'
+      - 'modules/gcp/**'
+      - '.github/workflows/staging-deploy.yml'
+      - '.github/workflows/terraform-deploy.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'environments/staging/**'
+      - 'modules/gcp/**'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deployment'
+        required: false
+        type: string
+
+jobs:
+  deploy-staging:
+    name: Deploy Staging Environment
+    uses: ./.github/workflows/terraform-deploy.yml
+    with:
+      environment: staging
+      terraform_version: '1.5.0'
+      working_directory: ./environments/staging
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.STAGING_GCP_PROJECT_ID }}
+      GCP_SA_KEY: ${{ secrets.STAGING_GCP_SA_KEY }}
+      TF_VAR_project_id: ${{ secrets.STAGING_GCP_PROJECT_ID }}
