@@ -28,6 +28,7 @@ jobs:
     uses: ./.github/workflows/terraform-deploy.yml
     permissions:
       pull-requests: write
+      contents: read
     with:
       environment: dev
       terraform_version: '1.5.0'
