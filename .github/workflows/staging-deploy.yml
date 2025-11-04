@@ -1,26 +1,12 @@
 name: Staging Environment - Deploy
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'environments/staging/**'
-      - 'modules/gcp/**'
-      - '.github/workflows/staging-deploy.yml'
-      - '.github/workflows/terraform-deploy.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'environments/staging/**'
       - 'modules/gcp/**'
-  workflow_dispatch:
-    inputs:
-      reason:
-        description: 'Reason for manual deployment'
-        required: false
-        type: string
 
 jobs:
   deploy-staging:
