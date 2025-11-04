@@ -24,8 +24,8 @@ on:
 
 jobs:
   deploy-dev:
-    environment: dev
     name: Deploy Dev Environment
+    environment: dev
     uses: ./.github/workflows/terraform-deploy.yml
     permissions:
       pull-requests: write
