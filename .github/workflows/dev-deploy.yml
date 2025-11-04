@@ -26,6 +26,8 @@ jobs:
   deploy-dev:
     name: Deploy Dev Environment
     uses: ./.github/workflows/terraform-deploy.yml
+    permissions:
+      pull-requests: write
     with:
       environment: dev
       terraform_version: '1.5.0'
