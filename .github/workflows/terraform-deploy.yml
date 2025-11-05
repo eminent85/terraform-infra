@@ -16,6 +16,10 @@ on:
         description: 'Working directory for Terraform'
         required: true
         type: string
+      github_token:
+        description: 'Github token to pull from'
+        required: true
+        type: string
     secrets:
       GCP_PROJECT_ID:
         required: true
@@ -51,12 +55,12 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ inputs.GCP_SA_KEY }}
 
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ inputs.GCP_PROJECT_ID }}
 
       - name: Terraform Format Check
         id: fmt
@@ -75,7 +79,7 @@ jobs:
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
         env:
-          TF_VAR_project_id: ${{ secrets.TF_VAR_project_id || secrets.GCP_PROJECT_ID }}
+          TF_VAR_project_id: ${{ inputs.TF_VAR_project_id || inputs.GCP_PROJECT_ID }}
         continue-on-error: true
 
       - name: Create Plan Summary
@@ -84,7 +88,7 @@ jobs:
         env:
           PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ inputs.github_token }}
           script: |
             const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
             #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
@@ -117,7 +121,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false tfplan
         env:
-          TF_VAR_project_id: ${{ secrets.TF_VAR_project_id || secrets.GCP_PROJECT_ID }}
+          TF_VAR_project_id: ${{ inputs.TF_VAR_project_id || inputs.GCP_PROJECT_ID }}
 
       - name: Terraform Output
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

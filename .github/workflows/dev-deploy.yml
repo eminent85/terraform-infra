@@ -9,12 +9,6 @@ on:
       - 'modules/gcp/**'
       - '.github/workflows/dev-deploy.yml'
       - '.github/workflows/terraform-deploy.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'environments/dev/**'
-      - 'modules/gcp/**'
   workflow_dispatch:
     inputs:
       reason:
@@ -34,7 +28,6 @@ jobs:
       environment: dev
       terraform_version: '1.5.0'
       working_directory: ./environments/dev
-    secrets:
       GCP_PROJECT_ID: ${{ secrets.DEV_GCP_PROJECT_ID }}
       GCP_SA_KEY: ${{ secrets.DEV_GCP_SA_KEY }}
       TF_VAR_project_id: ${{ secrets.DEV_GCP_PROJECT_ID }}

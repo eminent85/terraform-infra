@@ -9,12 +9,6 @@ on:
       - 'modules/gcp/**'
       - '.github/workflows/prod-deploy.yml'
       - '.github/workflows/terraform-deploy.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'environments/prod/**'
-      - 'modules/gcp/**'
   workflow_dispatch:
     inputs:
       reason:
