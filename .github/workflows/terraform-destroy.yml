@@ -27,8 +27,8 @@ on:
         required: true
 
 jobs:
-  terraform-destroy:
-    name: Terraform Destroy for ${{ inputs.environment }}
+  terraform-destroy-plan:
+    name: Terraform Destroy Plan for ${{ inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
 
@@ -71,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: destroy-plan-${{ inputs.environment }}
-          path: ${{ inputs.working_directory }}/destroy-plan
+          path: ./environments/${{ inputs.environment }}/destroy-plan
           retention-days: 5
 
   terraform-destroy:
@@ -84,7 +84,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: ${{ inputs.working_directory }}
+        working-directory: ./environments/${{ inputs.environment }}
 
     permissions:
       contents: read
@@ -96,7 +96,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ inputs.terraform_version }}
+          terraform_version: ./environments/${{ inputs.environment }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -115,7 +115,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: destroy-plan-${{ inputs.environment }}
-          path: ${{ inputs.working_directory }}
+          path: ./environments/${{ inputs.environment }}
 
       - name: Terraform Destroy
         run: terraform apply -auto-approve destroy-plan
