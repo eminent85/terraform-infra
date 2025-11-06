@@ -1,4 +1,4 @@
-name: Terraform Deploy
+name: Terraform Apply
 
 on:
   workflow_dispatch:
@@ -28,18 +28,20 @@ on:
         required: true
 
 jobs:
-
-  setup-environment:
-    name: Setup environment for ${{ inputs.environment }}
+  terraform-apply:
+    name: Terraform Apply to ${{ inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+
     defaults:
       run:
         shell: bash
         working-directory: ./environments/${{ inputs.environment }}
+
     permissions:
       contents: read
       pull-requests: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,21 +74,6 @@ jobs:
         id: validate
         run: terraform validate -no-color
 
-  terraform-plan:
-    name: Terraform Plan to ${{ inputs.environment }}
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-
-    defaults:
-      run:
-        shell: bash
-        working-directory: ./environments/${{ inputs.environment }}
-
-    permissions:
-      contents: read
-      pull-requests: write
-
-    steps:
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
@@ -98,21 +85,6 @@ jobs:
         if: steps.plan.outcome == 'failure'
         run: exit 1
 
-  terraform-apply:
-    name: Terraform Apply to ${{ inputs.environment }}
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-
-    defaults:
-      run:
-        shell: bash
-        working-directory: ./environments/${{ inputs.environment }}
-
-    permissions:
-      contents: read
-      pull-requests: write
-
-    steps:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false tfplan
