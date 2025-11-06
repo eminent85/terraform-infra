@@ -18,13 +18,7 @@ on:
         type: string
         default: '1.5.0'
     secrets:
-      ENVIRONMENT:
-        required: true
       GCP_SA_KEY:
-        required: true
-      TF_VAR_project_id:
-        required: false
-      GITHUB_TOKEN:
         required: true
 
 jobs:

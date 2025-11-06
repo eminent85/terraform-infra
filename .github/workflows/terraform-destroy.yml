@@ -1,46 +1,44 @@
 name: Terraform Destroy
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
       environment:
         description: 'Environment to destroy (dev, staging, prod)'
         required: true
-        type: string
+        type: choice
+        default: 'dev'
+        options:
+          - dev
+          - staging
+          - prod
       terraform_version:
         description: 'Terraform version to use'
         required: false
         type: string
         default: '1.5.0'
-      working_directory:
-        description: 'Working directory for Terraform'
-        required: true
-        type: string
       require_approval:
         description: 'Require manual approval before destroying'
         required: false
         type: boolean
         default: true
     secrets:
-      GCP_PROJECT_ID:
-        required: true
       GCP_SA_KEY:
         required: true
-      TF_VAR_project_id:
-        required: false
 
 jobs:
-  terraform-destroy-plan:
-    name: Plan Destroy for ${{ inputs.environment }}
+  terraform-destroy:
+    name: Terraform Destroy for ${{ inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
 
     defaults:
       run:
-        working-directory: ${{ inputs.working_directory }}
+        working-directory: ./environments/${{ inputs.environment }}
 
     permissions:
       contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout code
@@ -59,7 +57,7 @@ jobs:
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Terraform Init
         run: terraform init
@@ -67,7 +65,7 @@ jobs:
       - name: Terraform Destroy Plan
         run: terraform plan -destroy -no-color -input=false -out=destroy-plan
         env:
-          TF_VAR_project_id: ${{ secrets.TF_VAR_project_id || secrets.GCP_PROJECT_ID }}
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Upload Destroy Plan
         uses: actions/upload-artifact@v4
@@ -82,7 +80,7 @@ jobs:
     needs: terraform-destroy-plan
     environment:
       name: ${{ inputs.environment }}-destroy
-      url: https://console.cloud.google.com/home/dashboard?project=${{ secrets.GCP_PROJECT_ID }}
+      url: https://console.cloud.google.com/home/dashboard?project=${{ vars.GCP_PROJECT_ID }}
 
     defaults:
       run:
@@ -108,7 +106,7 @@ jobs:
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Terraform Init
         run: terraform init
@@ -122,7 +120,7 @@ jobs:
       - name: Terraform Destroy
         run: terraform apply -auto-approve destroy-plan
         env:
-          TF_VAR_project_id: ${{ secrets.TF_VAR_project_id || secrets.GCP_PROJECT_ID }}
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Confirm Destruction
         run: |
