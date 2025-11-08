@@ -1,0 +1,222 @@
+name: Create Ephemeral GKE Cluster
+
+on:
+  workflow_call:
+    inputs:
+      cluster_identifier:
+        description: 'Unique identifier for the cluster (e.g., pr-123, commit-abc123)'
+        required: true
+        type: string
+      terraform_version:
+        description: 'Terraform version to use'
+        required: false
+        type: string
+        default: '1.5.0'
+      machine_type:
+        description: 'GKE node machine type'
+        required: false
+        type: string
+        default: 'e2-medium'
+      min_nodes:
+        description: 'Minimum number of nodes'
+        required: false
+        type: number
+        default: 1
+      max_nodes:
+        description: 'Maximum number of nodes'
+        required: false
+        type: number
+        default: 3
+      region:
+        description: 'GCP region'
+        required: false
+        type: string
+        default: 'us-central1'
+      zone:
+        description: 'GCP zone'
+        required: false
+        type: string
+        default: 'us-central1-a'
+      enable_bastion:
+        description: 'Create bastion host for debugging'
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      cluster_name:
+        description: 'Name of the created GKE cluster'
+        value: ${{ jobs.create-cluster.outputs.cluster_name }}
+      cluster_endpoint:
+        description: 'GKE cluster endpoint'
+        value: ${{ jobs.create-cluster.outputs.cluster_endpoint }}
+      cluster_location:
+        description: 'GKE cluster location'
+        value: ${{ jobs.create-cluster.outputs.cluster_location }}
+      get_credentials_command:
+        description: 'Command to get cluster credentials'
+        value: ${{ jobs.create-cluster.outputs.get_credentials_command }}
+
+jobs:
+  create-cluster:
+    name: Create Ephemeral Cluster
+    runs-on: ubuntu-latest
+
+    outputs:
+      cluster_name: ${{ steps.terraform-output.outputs.cluster_name }}
+      cluster_endpoint: ${{ steps.terraform-output.outputs.cluster_endpoint }}
+      cluster_location: ${{ steps.terraform-output.outputs.cluster_location }}
+      get_credentials_command: ${{ steps.terraform-output.outputs.get_credentials_command }}
+
+    defaults:
+      run:
+        working-directory: ./environments/ephemeral
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout infrastructure repo
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Generate unique environment name
+        id: env-name
+        run: |
+          # Sanitize identifier for GCP naming (lowercase, alphanumeric, hyphens)
+          SANITIZED=$(echo "${{ inputs.cluster_identifier }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | cut -c1-40)
+          ENV_NAME="ephemeral-${SANITIZED}"
+          echo "env_name=${ENV_NAME}" >> $GITHUB_OUTPUT
+          echo "Creating cluster: ${ENV_NAME}"
+
+      - name: Create tfvars file
+        run: |
+          cat > terraform.tfvars <<EOF
+          project_id       = "${{ vars.GCP_PROJECT_ID }}"
+          region           = "${{ inputs.region }}"
+          zone             = "${{ inputs.zone }}"
+          environment_name = "${{ steps.env-name.outputs.env_name }}"
+
+          # Cluster configuration
+          regional_cluster     = false
+          use_preemptible_nodes = true
+          machine_type         = "${{ inputs.machine_type }}"
+          disk_size_gb         = 50
+          initial_node_count   = ${{ inputs.min_nodes }}
+          min_node_count       = ${{ inputs.min_nodes }}
+          max_node_count       = ${{ inputs.max_nodes }}
+
+          # Networking
+          enable_private_endpoint = false
+          master_authorized_networks = [
+            {
+              cidr_block   = "0.0.0.0/0"
+              display_name = "github-actions"
+            }
+          ]
+
+          # Features (minimal for ephemeral)
+          enable_network_policy     = false
+          enable_managed_prometheus = false
+          enable_gateway_api        = false
+
+          # Bastion
+          create_bastion = ${{ inputs.enable_bastion }}
+
+          # Workload Identity
+          create_test_service_account = true
+          test_k8s_namespace          = "default"
+          test_k8s_sa_name            = "app-sa"
+
+          # Labels for tracking and cleanup
+          additional_labels = {
+            ephemeral        = "true"
+            created_by       = "github-actions"
+            workflow_run_id  = "${{ github.run_id }}"
+            source_repo      = "${{ github.repository }}"
+          }
+          EOF
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -no-color
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Extract Terraform Outputs
+        id: terraform-output
+        run: |
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          CLUSTER_LOCATION=$(terraform output -raw cluster_location)
+          GET_CREDS_CMD=$(terraform output -raw get_credentials_command)
+
+          echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+          echo "cluster_location=${CLUSTER_LOCATION}" >> $GITHUB_OUTPUT
+          echo "get_credentials_command=${GET_CREDS_CMD}" >> $GITHUB_OUTPUT
+
+          # Store cluster endpoint (sensitive) in a secure way
+          CLUSTER_ENDPOINT=$(terraform output -raw cluster_endpoint)
+          echo "cluster_endpoint=${CLUSTER_ENDPOINT}" >> $GITHUB_OUTPUT
+
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ steps.terraform-output.outputs.cluster_name }} \
+            --region ${{ inputs.region }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify Cluster Access
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+          echo "✓ Cluster is ready and accessible"
+
+      - name: Save Terraform State Identifier
+        run: |
+          echo "${{ steps.env-name.outputs.env_name }}" > .terraform-state-id
+
+      - name: Upload State Identifier
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-state-${{ inputs.cluster_identifier }}
+          path: ./environments/ephemeral/.terraform-state-id
+          retention-days: 1
+
+      - name: Cluster Creation Summary
+        run: |
+          echo "### Ephemeral Cluster Created Successfully! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Cluster Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Name: \`${{ steps.terraform-output.outputs.cluster_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Location: \`${{ steps.terraform-output.outputs.cluster_location }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Machine Type: \`${{ inputs.machine_type }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Nodes: ${{ inputs.min_nodes }}-${{ inputs.max_nodes }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Get Credentials:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.terraform-output.outputs.get_credentials_command }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

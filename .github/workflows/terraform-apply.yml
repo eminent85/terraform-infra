@@ -17,9 +17,6 @@ on:
         required: false
         type: string
         default: '1.5.0'
-    secrets:
-      GCP_SA_KEY:
-        required: true
 
 jobs:
   terraform-apply:

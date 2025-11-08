@@ -1,0 +1,189 @@
+name: Destroy Ephemeral GKE Cluster
+
+on:
+  workflow_call:
+    inputs:
+      cluster_identifier:
+        description: 'Unique identifier for the cluster to destroy'
+        required: true
+        type: string
+      terraform_version:
+        description: 'Terraform version to use'
+        required: false
+        type: string
+        default: '1.5.0'
+      region:
+        description: 'GCP region where cluster was created'
+        required: false
+        type: string
+        default: 'us-central1'
+
+jobs:
+  destroy-cluster:
+    name: Destroy Ephemeral Cluster
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./environments/ephemeral
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout infrastructure repo
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Generate environment name
+        id: env-name
+        run: |
+          SANITIZED=$(echo "${{ inputs.cluster_identifier }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | cut -c1-40)
+          ENV_NAME="ephemeral-${SANITIZED}"
+          echo "env_name=${ENV_NAME}" >> $GITHUB_OUTPUT
+          echo "Destroying cluster: ${ENV_NAME}"
+
+      - name: Download State Identifier (if available)
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-state-${{ inputs.cluster_identifier }}
+          path: ./environments/ephemeral
+
+      - name: Recreate tfvars for destroy
+        run: |
+          cat > terraform.tfvars <<EOF
+          project_id       = "${{ vars.GCP_PROJECT_ID }}"
+          region           = "${{ inputs.region }}"
+          environment_name = "${{ steps.env-name.outputs.env_name }}"
+
+          # These don't matter for destroy but are required variables
+          regional_cluster     = false
+          use_preemptible_nodes = true
+          machine_type         = "e2-medium"
+          disk_size_gb         = 50
+          initial_node_count   = 1
+          min_node_count       = 1
+          max_node_count       = 3
+          create_bastion       = false
+          EOF
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Check if resources exist
+        id: check-resources
+        continue-on-error: true
+        run: |
+          # Try to refresh state to see if resources exist
+          terraform refresh -no-color
+          RESOURCE_COUNT=$(terraform state list 2>/dev/null | wc -l)
+          echo "resource_count=${RESOURCE_COUNT}" >> $GITHUB_OUTPUT
+
+          if [ "$RESOURCE_COUNT" -eq 0 ]; then
+            echo "No resources found in state. Cluster may have already been destroyed."
+          fi
+
+      - name: Terraform Destroy
+        if: steps.check-resources.outputs.resource_count != '0'
+        run: terraform destroy -auto-approve -no-color
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+        continue-on-error: true
+
+      - name: Force cleanup GCP resources (fallback)
+        if: failure()
+        run: |
+          echo "Attempting force cleanup of resources..."
+
+          CLUSTER_NAME="${{ steps.env-name.outputs.env_name }}-cluster"
+          NETWORK_NAME="${{ steps.env-name.outputs.env_name }}-vpc"
+
+          # Try to delete cluster directly
+          if gcloud container clusters describe "$CLUSTER_NAME" --region=${{ inputs.region }} --project=${{ vars.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "Force deleting cluster: $CLUSTER_NAME"
+            gcloud container clusters delete "$CLUSTER_NAME" \
+              --region=${{ inputs.region }} \
+              --project=${{ vars.GCP_PROJECT_ID }} \
+              --quiet || true
+          fi
+
+          # Wait a bit for cluster deletion
+          sleep 30
+
+          # Try to delete network
+          if gcloud compute networks describe "$NETWORK_NAME" --project=${{ vars.GCP_PROJECT_ID }} &>/dev/null; then
+            # Delete firewall rules first
+            FIREWALL_RULES=$(gcloud compute firewall-rules list \
+              --filter="network:$NETWORK_NAME" \
+              --format="value(name)" \
+              --project=${{ vars.GCP_PROJECT_ID }})
+
+            for rule in $FIREWALL_RULES; do
+              echo "Deleting firewall rule: $rule"
+              gcloud compute firewall-rules delete "$rule" \
+                --project=${{ vars.GCP_PROJECT_ID }} \
+                --quiet || true
+            done
+
+            # Delete subnets
+            SUBNETS=$(gcloud compute networks subnets list \
+              --filter="network:$NETWORK_NAME" \
+              --format="value(name,region)" \
+              --project=${{ vars.GCP_PROJECT_ID }})
+
+            while IFS=$'\t' read -r subnet region; do
+              echo "Deleting subnet: $subnet in $region"
+              gcloud compute networks subnets delete "$subnet" \
+                --region="$region" \
+                --project=${{ vars.GCP_PROJECT_ID }} \
+                --quiet || true
+            done <<< "$SUBNETS"
+
+            # Delete network
+            echo "Deleting network: $NETWORK_NAME"
+            gcloud compute networks delete "$NETWORK_NAME" \
+              --project=${{ vars.GCP_PROJECT_ID }} \
+              --quiet || true
+          fi
+
+      - name: Verify Cleanup
+        run: |
+          CLUSTER_NAME="${{ steps.env-name.outputs.env_name }}-cluster"
+
+          if gcloud container clusters describe "$CLUSTER_NAME" --region=${{ inputs.region }} --project=${{ vars.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "⚠ Warning: Cluster still exists after cleanup attempt"
+            exit 1
+          else
+            echo "✓ Cluster successfully destroyed"
+          fi
+
+      - name: Cleanup Summary
+        if: always()
+        run: |
+          echo "### Ephemeral Cluster Cleanup Complete 🧹" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Cluster Identifier:** \`${{ inputs.cluster_identifier }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment Name:** \`${{ steps.env-name.outputs.env_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✓ All resources destroyed successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠ Some resources may require manual cleanup" >> $GITHUB_STEP_SUMMARY
+          fi
