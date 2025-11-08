@@ -58,13 +58,6 @@ jobs:
           echo "env_name=${ENV_NAME}" >> $GITHUB_OUTPUT
           echo "Destroying cluster: ${ENV_NAME}"
 
-      - name: Download State Identifier (if available)
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-state-${{ inputs.cluster_identifier }}
-          path: ./environments/ephemeral
-
       - name: Recreate tfvars for destroy
         run: |
           cat > terraform.tfvars <<EOF
@@ -86,73 +79,181 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Check if resources exist
-        id: check-resources
-        continue-on-error: true
+      - name: Select Terraform Workspace
+        id: select-workspace
         run: |
-          # Try to refresh state to see if resources exist
-          terraform refresh -no-color
+          WORKSPACE_NAME="${{ steps.env-name.outputs.env_name }}"
+          echo "Attempting to select workspace: $WORKSPACE_NAME"
+
+          if terraform workspace select "$WORKSPACE_NAME" 2>/dev/null; then
+            echo "✓ Successfully selected workspace: $WORKSPACE_NAME"
+            echo "workspace_exists=true" >> $GITHUB_OUTPUT
+
+            # Show current workspace
+            echo "Current workspace:"
+            terraform workspace show
+
+            # List all resources
+            echo "Resources in state:"
+            terraform state list || echo "No resources found"
+          else
+            echo "⚠️  Workspace '$WORKSPACE_NAME' does not exist"
+            echo "This likely means:"
+            echo "  1. The cluster was never created, or"
+            echo "  2. The cluster was already destroyed and workspace cleaned up"
+            echo ""
+            echo "workspace_exists=false" >> $GITHUB_OUTPUT
+
+            # List available workspaces
+            echo "Available workspaces:"
+            terraform workspace list
+          fi
+
+      - name: Verify State and Resources
+        id: check-resources
+        if: steps.select-workspace.outputs.workspace_exists == 'true'
+        run: |
+          echo "Verifying terraform state..."
+
+          # Count resources in state
           RESOURCE_COUNT=$(terraform state list 2>/dev/null | wc -l)
           echo "resource_count=${RESOURCE_COUNT}" >> $GITHUB_OUTPUT
+          echo "Found $RESOURCE_COUNT resources in state"
 
           if [ "$RESOURCE_COUNT" -eq 0 ]; then
-            echo "No resources found in state. Cluster may have already been destroyed."
+            echo "⚠️  WARNING: State exists but contains no resources!"
+            echo "This may indicate a previous destroy completed but workspace wasn't cleaned up."
+            echo "should_destroy=false" >> $GITHUB_OUTPUT
+          else
+            echo "✓ State contains resources. Proceeding with destroy."
+            echo "should_destroy=true" >> $GITHUB_OUTPUT
+
+            # Show what will be destroyed
+            echo ""
+            echo "Resources to be destroyed:"
+            terraform state list
           fi
 
       - name: Terraform Destroy
-        if: steps.check-resources.outputs.resource_count != '0'
-        run: terraform destroy -auto-approve -no-color
+        if: steps.check-resources.outputs.should_destroy == 'true'
+        id: terraform-destroy
+        run: |
+          echo "Starting terraform destroy..."
+          terraform destroy -auto-approve -no-color
+
+          # Verify all resources were destroyed
+          REMAINING=$(terraform state list 2>/dev/null | wc -l)
+          if [ "$REMAINING" -gt 0 ]; then
+            echo "⚠️  WARNING: $REMAINING resources remain in state after destroy"
+            terraform state list
+            exit 1
+          fi
+
+          echo "✓ All resources successfully destroyed"
         env:
           TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-        continue-on-error: true
+
+      - name: Cleanup Terraform Workspace
+        if: steps.terraform-destroy.outcome == 'success'
+        run: |
+          WORKSPACE_NAME="${{ steps.env-name.outputs.env_name }}"
+          echo "Cleaning up workspace: $WORKSPACE_NAME"
+
+          # Switch back to default workspace
+          terraform workspace select default
+
+          # Delete the ephemeral workspace
+          terraform workspace delete "$WORKSPACE_NAME"
+
+          echo "✓ Workspace deleted successfully"
 
       - name: Force cleanup GCP resources (fallback)
         if: failure()
         run: |
-          echo "Attempting force cleanup of resources..."
+          echo "⚠️  Terraform destroy failed. Attempting force cleanup of resources..."
+          echo ""
 
-          CLUSTER_NAME="${{ steps.env-name.outputs.env_name }}-cluster"
-          NETWORK_NAME="${{ steps.env-name.outputs.env_name }}-vpc"
+          ENV_NAME="${{ steps.env-name.outputs.env_name }}"
+          CLUSTER_NAME="${ENV_NAME}-cluster"
+          NETWORK_NAME="${ENV_NAME}-vpc"
+          SA_NAME="${ENV_NAME}-test-sa"
 
-          # Try to delete cluster directly
+          # 1. Try to delete GKE cluster
+          echo "=== Cleaning up GKE cluster ==="
           if gcloud container clusters describe "$CLUSTER_NAME" --region=${{ inputs.region }} --project=${{ vars.GCP_PROJECT_ID }} &>/dev/null; then
             echo "Force deleting cluster: $CLUSTER_NAME"
             gcloud container clusters delete "$CLUSTER_NAME" \
               --region=${{ inputs.region }} \
               --project=${{ vars.GCP_PROJECT_ID }} \
               --quiet || true
+            echo "Waiting for cluster deletion to complete..."
+            sleep 30
+          else
+            echo "Cluster $CLUSTER_NAME not found or already deleted"
           fi
 
-          # Wait a bit for cluster deletion
-          sleep 30
+          # 2. Clean up service accounts
+          echo ""
+          echo "=== Cleaning up service accounts ==="
+          SA_EMAIL="${SA_NAME}@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          if gcloud iam service-accounts describe "$SA_EMAIL" --project=${{ vars.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "Deleting service account: $SA_EMAIL"
 
-          # Try to delete network
+            # Remove IAM policy bindings first
+            ROLES=$(gcloud projects get-iam-policy ${{ vars.GCP_PROJECT_ID }} \
+              --flatten="bindings[].members" \
+              --filter="bindings.members:serviceAccount:$SA_EMAIL" \
+              --format="value(bindings.role)" 2>/dev/null || true)
+
+            for role in $ROLES; do
+              echo "Removing IAM binding: $role"
+              gcloud projects remove-iam-policy-binding ${{ vars.GCP_PROJECT_ID }} \
+                --member="serviceAccount:$SA_EMAIL" \
+                --role="$role" \
+                --quiet 2>/dev/null || true
+            done
+
+            # Delete the service account
+            gcloud iam service-accounts delete "$SA_EMAIL" \
+              --project=${{ vars.GCP_PROJECT_ID }} \
+              --quiet || true
+          else
+            echo "Service account $SA_EMAIL not found or already deleted"
+          fi
+
+          # 3. Clean up networking resources
+          echo ""
+          echo "=== Cleaning up network resources ==="
           if gcloud compute networks describe "$NETWORK_NAME" --project=${{ vars.GCP_PROJECT_ID }} &>/dev/null; then
             # Delete firewall rules first
+            echo "Deleting firewall rules..."
             FIREWALL_RULES=$(gcloud compute firewall-rules list \
               --filter="network:$NETWORK_NAME" \
               --format="value(name)" \
-              --project=${{ vars.GCP_PROJECT_ID }})
+              --project=${{ vars.GCP_PROJECT_ID }} 2>/dev/null || true)
 
             for rule in $FIREWALL_RULES; do
-              echo "Deleting firewall rule: $rule"
+              echo "  - Deleting firewall rule: $rule"
               gcloud compute firewall-rules delete "$rule" \
                 --project=${{ vars.GCP_PROJECT_ID }} \
                 --quiet || true
             done
 
             # Delete subnets
+            echo "Deleting subnets..."
             SUBNETS=$(gcloud compute networks subnets list \
               --filter="network:$NETWORK_NAME" \
               --format="value(name,region)" \
-              --project=${{ vars.GCP_PROJECT_ID }})
+              --project=${{ vars.GCP_PROJECT_ID }} 2>/dev/null || true)
 
             while IFS=$'\t' read -r subnet region; do
-              echo "Deleting subnet: $subnet in $region"
-              gcloud compute networks subnets delete "$subnet" \
-                --region="$region" \
-                --project=${{ vars.GCP_PROJECT_ID }} \
-                --quiet || true
+              if [ -n "$subnet" ]; then
+                echo "  - Deleting subnet: $subnet in $region"
+                gcloud compute networks subnets delete "$subnet" \
+                  --region="$region" \
+                  --project=${{ vars.GCP_PROJECT_ID }} \
+                  --quiet || true
+              fi
             done <<< "$SUBNETS"
 
             # Delete network
@@ -160,7 +261,12 @@ jobs:
             gcloud compute networks delete "$NETWORK_NAME" \
               --project=${{ vars.GCP_PROJECT_ID }} \
               --quiet || true
+          else
+            echo "Network $NETWORK_NAME not found or already deleted"
           fi
+
+          echo ""
+          echo "✓ Force cleanup completed"
 
       - name: Verify Cleanup
         run: |
@@ -182,8 +288,32 @@ jobs:
           echo "**Environment Name:** \`${{ steps.env-name.outputs.env_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "✓ All resources destroyed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "**Cleanup Method:**" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.terraform-destroy.outcome }}" == "success" ]; then
+            echo "- ✓ Terraform destroy completed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "- ✓ Workspace cleaned up" >> $GITHUB_STEP_SUMMARY
+            echo "- ✓ State removed from GCS backend" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.select-workspace.outputs.workspace_exists }}" == "false" ]; then
+            echo "- ℹ️  Workspace did not exist (cluster may not have been created)" >> $GITHUB_STEP_SUMMARY
+            echo "- ✓ No cleanup necessary" >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠ Some resources may require manual cleanup" >> $GITHUB_STEP_SUMMARY
+            echo "- ⚠️  Terraform destroy failed" >> $GITHUB_STEP_SUMMARY
+            echo "- ✓ Force cleanup executed via gcloud commands" >> $GITHUB_STEP_SUMMARY
+            echo "- ⚠️  Manual verification recommended" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "**Status:** ✓ All resources destroyed successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status:** ⚠️  Some resources may require manual cleanup" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Manual verification steps:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "# Check for remaining cluster" >> $GITHUB_STEP_SUMMARY
+            echo "gcloud container clusters describe ${{ steps.env-name.outputs.env_name }}-cluster --region ${{ inputs.region }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "# Check for orphaned resources" >> $GITHUB_STEP_SUMMARY
+            echo "gcloud compute networks describe ${{ steps.env-name.outputs.env_name }}-vpc" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi

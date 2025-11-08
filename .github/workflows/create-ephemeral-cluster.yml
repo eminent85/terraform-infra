@@ -155,6 +155,25 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Select or Create Terraform Workspace
+        run: |
+          WORKSPACE_NAME="${{ steps.env-name.outputs.env_name }}"
+          echo "Using workspace: $WORKSPACE_NAME"
+
+          # Try to select workspace, create if it doesn't exist
+          if terraform workspace select "$WORKSPACE_NAME" 2>/dev/null; then
+            echo "✓ Switched to existing workspace: $WORKSPACE_NAME"
+            echo "⚠️  WARNING: Workspace already exists. This may indicate a previous cluster was not cleaned up."
+
+            # Show what's in the state
+            echo "Current resources in state:"
+            terraform state list || echo "No resources found"
+          else
+            echo "Creating new workspace: $WORKSPACE_NAME"
+            terraform workspace new "$WORKSPACE_NAME"
+            echo "✓ Created new workspace: $WORKSPACE_NAME"
+          fi
+
       - name: Terraform Validate
         run: terraform validate
 
@@ -195,16 +214,20 @@ jobs:
           kubectl get nodes
           echo "✓ Cluster is ready and accessible"
 
-      - name: Save Terraform State Identifier
+      - name: Verify State in Remote Backend
         run: |
-          echo "${{ steps.env-name.outputs.env_name }}" > .terraform-state-id
+          echo "Verifying terraform state is stored in remote backend..."
+          RESOURCE_COUNT=$(terraform state list | wc -l)
+          echo "✓ State contains $RESOURCE_COUNT resources"
 
-      - name: Upload State Identifier
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-state-${{ inputs.cluster_identifier }}
-          path: ./environments/ephemeral/.terraform-state-id
-          retention-days: 1
+          if [ "$RESOURCE_COUNT" -eq 0 ]; then
+            echo "⚠️  WARNING: No resources in state after apply!"
+            exit 1
+          fi
+
+          echo "State backend: GCS"
+          echo "Workspace: ${{ steps.env-name.outputs.env_name }}"
+          echo "✓ State successfully stored and verified"
 
       - name: Cluster Creation Summary
         run: |
@@ -215,6 +238,11 @@ jobs:
           echo "- Location: \`${{ steps.terraform-output.outputs.cluster_location }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Machine Type: \`${{ inputs.machine_type }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Nodes: ${{ inputs.min_nodes }}-${{ inputs.max_nodes }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Terraform State:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: GCS (\`eminent-dev-terraform-state\`)" >> $GITHUB_STEP_SUMMARY
+          echo "- Workspace: \`${{ steps.env-name.outputs.env_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- State Path: \`ephemeral-cluster/${{ steps.env-name.outputs.env_name }}/default.tfstate\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Get Credentials:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
