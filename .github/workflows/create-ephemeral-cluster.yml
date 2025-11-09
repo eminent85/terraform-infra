@@ -42,6 +42,14 @@ on:
         required: false
         type: boolean
         default: false
+      project_id:
+        description: 'GCP project id'
+        required: true
+        type: string
+      gcp_sa_key:
+        description: 'gcp service account key to authenticate with gcloud api'
+        required: true
+        type: string
     outputs:
       cluster_name:
         description: 'Name of the created GKE cluster'
@@ -88,12 +96,12 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ inputs.gcp_sa_key}}
 
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ vars.GCP_PROJECT_ID }}
+          project_id: ${{ inputs.project_id }}
 
       - name: Generate unique environment name
         id: env-name
@@ -107,7 +115,7 @@ jobs:
       - name: Create tfvars file
         run: |
           cat > terraform.tfvars <<EOF
-          project_id       = "${{ vars.GCP_PROJECT_ID }}"
+          project_id       = "${{ inputs.project_id }}"
           region           = "${{ inputs.region }}"
           zone             = "${{ inputs.zone }}"
           environment_name = "${{ steps.env-name.outputs.env_name }}"
@@ -180,12 +188,12 @@ jobs:
       - name: Terraform Plan
         run: terraform plan -out=tfplan -no-color
         env:
-          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_project_id: ${{ inputs.project_id }}
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
         env:
-          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_project_id: ${{ inputs.project_id }}
 
       - name: Extract Terraform Outputs
         id: terraform-output
@@ -206,7 +214,7 @@ jobs:
         run: |
           gcloud container clusters get-credentials ${{ steps.terraform-output.outputs.cluster_name }} \
             --region ${{ inputs.region }} \
-            --project ${{ vars.GCP_PROJECT_ID }}
+            --project ${{ inputs.project_id }}
 
       - name: Verify Cluster Access
         run: |
