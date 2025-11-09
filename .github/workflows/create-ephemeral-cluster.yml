@@ -183,7 +183,7 @@ jobs:
       - name: Get GKE Credentials
         run: |
           gcloud container clusters get-credentials ${{ steps.terraform-output.outputs.cluster_name }} \
-            --region ${{ inputs.region }} \
+            --zone ${{ inputs.zone }} \
             --project ${{ inputs.project_id }}
 
       - name: Verify Cluster Access
