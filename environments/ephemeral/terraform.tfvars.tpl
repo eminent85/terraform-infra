@@ -39,5 +39,4 @@ additional_labels = {
   ephemeral       = "true"
   created_by      = "github-actions"
   workflow_run_id = "${WORKFLOW_RUN_ID}"
-  source_repo     = "${SOURCE_REPO}"
 }

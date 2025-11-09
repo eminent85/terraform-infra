@@ -127,7 +127,6 @@ jobs:
           export MAX_NODE_COUNT="${{ inputs.max_nodes }}"
           export CREATE_BASTION="${{ inputs.enable_bastion }}"
           export WORKFLOW_RUN_ID="${{ github.run_id }}"
-          export SOURCE_REPO="${{ github.repository }}"
 
           envsubst < terraform.tfvars.tpl > terraform.tfvars
 
