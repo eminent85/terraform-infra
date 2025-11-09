@@ -21,10 +21,10 @@ on:
         description: 'GCP project id'
         required: true
         type: string
+    secrets:
       gcp_sa_key:
         description: 'gcp service account key to authenticate with gcloud api'
         required: true
-        type: string
 
 jobs:
   destroy-cluster:
@@ -51,7 +51,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ inputs.gcp_sa_key }}
+          credentials_json: ${{ secrets.gcp_sa_key }}
 
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
