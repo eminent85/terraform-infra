@@ -159,10 +159,10 @@ jobs:
         env:
           TF_VAR_project_id: ${{ inputs.project_id }}
 
-      # - name: Terraform Apply
-      #   run: terraform apply -auto-approve tfplan
-      #   env:
-      #     TF_VAR_project_id: ${{ inputs.project_id }}
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        env:
+          TF_VAR_project_id: ${{ inputs.project_id }}
 
       - name: Extract Terraform Outputs
         id: terraform-output
