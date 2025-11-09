@@ -112,53 +112,22 @@ jobs:
           echo "env_name=${ENV_NAME}" >> $GITHUB_OUTPUT
           echo "Creating cluster: ${ENV_NAME}"
 
-      - name: Create tfvars file
+      - name: Create tfvars file from template
         run: |
-          cat > terraform.tfvars <<EOF
-          project_id       = "${{ inputs.project_id }}"
-          region           = "${{ inputs.region }}"
-          zone             = "${{ inputs.zone }}"
-          environment_name = "${{ steps.env-name.outputs.env_name }}"
+          # Use envsubst to substitute variables in template
+          export PROJECT_ID="${{ inputs.project_id }}"
+          export REGION="${{ inputs.region }}"
+          export ZONE="${{ inputs.zone }}"
+          export ENVIRONMENT_NAME="${{ steps.env-name.outputs.env_name }}"
+          export MACHINE_TYPE="${{ inputs.machine_type }}"
+          export INITIAL_NODE_COUNT="${{ inputs.min_nodes }}"
+          export MIN_NODE_COUNT="${{ inputs.min_nodes }}"
+          export MAX_NODE_COUNT="${{ inputs.max_nodes }}"
+          export CREATE_BASTION="${{ inputs.enable_bastion }}"
+          export WORKFLOW_RUN_ID="${{ github.run_id }}"
+          export SOURCE_REPO="${{ github.repository }}"
 
-          # Cluster configuration
-          regional_cluster     = false
-          use_preemptible_nodes = true
-          machine_type         = "${{ inputs.machine_type }}"
-          disk_size_gb         = 50
-          initial_node_count   = ${{ inputs.min_nodes }}
-          min_node_count       = ${{ inputs.min_nodes }}
-          max_node_count       = ${{ inputs.max_nodes }}
-
-          # Networking
-          enable_private_endpoint = false
-          master_authorized_networks = [
-            {
-              cidr_block   = "0.0.0.0/0"
-              display_name = "github-actions"
-            }
-          ]
-
-          # Features (minimal for ephemeral)
-          enable_network_policy     = false
-          enable_managed_prometheus = false
-          enable_gateway_api        = false
-
-          # Bastion
-          create_bastion = ${{ inputs.enable_bastion }}
-
-          # Workload Identity
-          create_test_service_account = true
-          test_k8s_namespace          = "default"
-          test_k8s_sa_name            = "app-sa"
-
-          # Labels for tracking and cleanup
-          additional_labels = {
-            ephemeral        = "true"
-            created_by       = "github-actions"
-            workflow_run_id  = "${{ github.run_id }}"
-            source_repo      = "${{ github.repository }}"
-          }
-          EOF
+          envsubst < terraform.tfvars.tpl > terraform.tfvars
 
       - name: Terraform Init
         run: terraform init
@@ -190,10 +159,10 @@ jobs:
         env:
           TF_VAR_project_id: ${{ inputs.project_id }}
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
-        env:
-          TF_VAR_project_id: ${{ inputs.project_id }}
+      # - name: Terraform Apply
+      #   run: terraform apply -auto-approve tfplan
+      #   env:
+      #     TF_VAR_project_id: ${{ inputs.project_id }}
 
       - name: Extract Terraform Outputs
         id: terraform-output
