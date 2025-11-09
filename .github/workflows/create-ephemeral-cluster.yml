@@ -77,7 +77,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: ./environments/ephemeral
+        working-directory: environments/ephemeral
 
     permissions:
       contents: read
@@ -86,6 +86,8 @@ jobs:
     steps:
       - name: Checkout infrastructure repo
         uses: actions/checkout@v4
+        with:
+          repository: eminent85/terraform-infra
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
