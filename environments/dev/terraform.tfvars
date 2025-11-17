@@ -42,7 +42,7 @@ gke_enable_private_endpoint = false
 # GKE Node Pool Configuration - Small, preemptible nodes
 gke_node_count        = 1
 gke_min_node_count    = 1
-gke_max_node_count    = 3           # Lower max for dev
+gke_max_node_count    = 6           # Lower max for dev
 gke_machine_type      = "e2-medium" # Smaller instance type
 gke_disk_size_gb      = 50          # Smaller disk
 gke_preemptible_nodes = true        # Use preemptible nodes for cost savings
