@@ -2,8 +2,8 @@
 # Balanced settings - production-like but smaller scale
 
 # Project Configuration
-region     = "us-central1"
-zone       = "us-central1-a"
+region = "us-central1"
+zone   = "us-central1-a"
 
 # Labels to apply to all resources
 labels = {

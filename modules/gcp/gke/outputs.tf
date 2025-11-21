@@ -44,3 +44,23 @@ output "workload_identity_pool" {
   description = "The workload identity pool for the cluster"
   value       = "${var.project_id}.svc.id.goog"
 }
+
+output "registry_sa_email" {
+  description = "Email of the registry service account"
+  value       = var.create_registry_sa ? google_service_account.registry_sa[0].email : null
+}
+
+output "registry_sa_annotation" {
+  description = "Annotation value to add to Kubernetes service account for Workload Identity"
+  value       = var.create_registry_sa ? google_service_account.registry_sa[0].email : null
+}
+
+output "registry_sa_k8s_namespace" {
+  description = "Kubernetes namespace for the registry service account"
+  value       = var.create_registry_sa ? var.registry_sa_namespace : null
+}
+
+output "registry_sa_k8s_name" {
+  description = "Kubernetes service account name for registry access"
+  value       = var.create_registry_sa ? var.registry_sa_k8s_name : null
+}

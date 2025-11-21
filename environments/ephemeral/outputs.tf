@@ -71,18 +71,18 @@ output "bastion_ssh_command" {
 # Service Account Outputs
 output "test_service_account_email" {
   description = "Email of the test workload service account"
-  value       = var.create_test_service_account ? google_service_account.test_workload_sa[0].email : null
+  value       = var.create_test_service_account ? module.test_service_account[0].email : null
 }
 
 output "test_service_account_name" {
   description = "Name of the test workload service account"
-  value       = var.create_test_service_account ? google_service_account.test_workload_sa[0].name : null
+  value       = var.create_test_service_account ? module.test_service_account[0].name : null
 }
 
 # Quick Start Commands
 output "quick_start_commands" {
   description = "Quick start commands for using this environment"
-  value = <<-EOT
+  value       = <<-EOT
     # Get GKE credentials:
     ${module.gke.cluster_location != "" ? "gcloud container clusters get-credentials ${module.gke.cluster_name} --region ${var.region} --project ${var.project_id}" : ""}
 
@@ -92,7 +92,7 @@ output "quick_start_commands" {
     # Create test namespace and service account (if using Workload Identity):
     kubectl create namespace ${var.test_k8s_namespace}
     kubectl create serviceaccount ${var.test_k8s_sa_name} -n ${var.test_k8s_namespace}
-    kubectl annotate serviceaccount ${var.test_k8s_sa_name} -n ${var.test_k8s_namespace} iam.gke.io/gcp-service-account=${var.create_test_service_account ? google_service_account.test_workload_sa[0].email : "SERVICE_ACCOUNT_EMAIL"}
+    kubectl annotate serviceaccount ${var.test_k8s_sa_name} -n ${var.test_k8s_namespace} iam.gke.io/gcp-service-account=${var.create_test_service_account ? module.test_service_account[0].email : "SERVICE_ACCOUNT_EMAIL"}
     ${var.create_bastion ? "\n    # SSH to bastion (for debugging):\n    gcloud compute ssh ${module.bastion[0].bastion_instance_name} --zone=${var.zone} --tunnel-through-iap --project=${var.project_id}" : ""}
   EOT
 }

@@ -210,3 +210,28 @@ resource "google_compute_address" "istio_ingress_ip" {
   region  = var.region
   project = var.project_id
 }
+
+# Service Account for pulling containers and Helm charts from Artifact Registry
+resource "google_service_account" "registry_sa" {
+  count        = var.create_registry_sa ? 1 : 0
+  project      = var.project_id
+  account_id   = "${var.cluster_name}-registry-sa"
+  display_name = "GKE Registry Service Account for ${var.cluster_name}"
+  description  = "Service account for pulling containers and Helm charts from Artifact Registry"
+}
+
+# Grant Artifact Registry Reader role to the service account
+resource "google_project_iam_member" "registry_sa_artifact_registry_reader" {
+  count   = var.create_registry_sa ? 1 : 0
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.registry_sa[0].email}"
+}
+
+# Workload Identity binding - allows Kubernetes service account to impersonate the GCP service account
+resource "google_service_account_iam_member" "registry_sa_workload_identity" {
+  count              = var.create_registry_sa ? 1 : 0
+  service_account_id = google_service_account.registry_sa[0].name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.registry_sa_namespace}/${var.registry_sa_k8s_name}]"
+}

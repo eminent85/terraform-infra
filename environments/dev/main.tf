@@ -102,6 +102,11 @@ module "gke" {
   release_channel           = var.gke_release_channel
   enable_managed_prometheus = var.gke_enable_managed_prometheus
 
+  # Registry service account for pulling containers and Helm charts
+  create_registry_sa    = var.gke_create_registry_sa
+  registry_sa_namespace = var.gke_registry_sa_namespace
+  registry_sa_k8s_name  = var.gke_registry_sa_k8s_name
+
   cluster_labels = var.labels
 
   depends_on = [module.network]

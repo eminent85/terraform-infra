@@ -180,3 +180,22 @@ variable "gke_enable_managed_prometheus" {
   type        = bool
   default     = false
 }
+
+# Registry Service Account Configuration
+variable "gke_create_registry_sa" {
+  description = "Create a service account for pulling from Artifact Registry"
+  type        = bool
+  default     = false
+}
+
+variable "gke_registry_sa_namespace" {
+  description = "Kubernetes namespace for the registry service account"
+  type        = string
+  default     = "default"
+}
+
+variable "gke_registry_sa_k8s_name" {
+  description = "Kubernetes service account name that will use the GCP registry service account"
+  type        = string
+  default     = "registry-sa"
+}

@@ -2,8 +2,8 @@
 # Production-grade settings with high availability and reliability
 
 # Project Configuration
-region     = "us-central1"
-zone       = "us-central1-a"
+region = "us-central1"
+zone   = "us-central1-a"
 
 # Labels to apply to all resources
 labels = {
@@ -35,17 +35,17 @@ istio_version = "1.20.2"
 
 # GKE Cluster Configuration - Production grade
 cluster_name                = "gke-cluster-prod"
-gke_regional                = true  # Regional cluster for HA
+gke_regional                = true # Regional cluster for HA
 gke_master_ipv4_cidr_block  = "172.18.0.0/28"
 gke_enable_private_endpoint = false
 
 # GKE Node Pool Configuration - Production sized
-gke_node_count        = 2             # Start with 2 nodes per zone (6 total)
-gke_min_node_count    = 2             # Minimum 2 per zone for HA
-gke_max_node_count    = 10            # Allow scaling up to 10 per zone
+gke_node_count        = 2               # Start with 2 nodes per zone (6 total)
+gke_min_node_count    = 2               # Minimum 2 per zone for HA
+gke_max_node_count    = 10              # Allow scaling up to 10 per zone
 gke_machine_type      = "e2-standard-4" # Production-grade instance
-gke_disk_size_gb      = 100           # Full disk size
-gke_preemptible_nodes = false         # Standard nodes for reliability
+gke_disk_size_gb      = 100             # Full disk size
+gke_preemptible_nodes = false           # Standard nodes for reliability
 
 # GKE Features
 gke_enable_network_policy     = true
