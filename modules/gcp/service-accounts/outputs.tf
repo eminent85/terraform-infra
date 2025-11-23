@@ -22,3 +22,8 @@ output "member" {
   description = "IAM member string for the service account (serviceAccount:email)"
   value       = "serviceAccount:${google_service_account.service_account.email}"
 }
+
+output "workload_identity_bindings" {
+  description = "List of Kubernetes namespace/service account bindings configured for workload identity"
+  value       = local.workload_identity_bindings
+}

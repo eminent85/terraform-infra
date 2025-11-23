@@ -111,3 +111,28 @@ module "gke" {
 
   depends_on = [module.network]
 }
+
+# Workload Identity Service Account for GKE workloads
+# Provides access to Artifact Registry, Cloud SQL, and Redis
+module "workload_identity_sa" {
+  source = "../../modules/gcp/service-accounts"
+
+  project_id   = var.project_id
+  account_id   = var.workload_identity_sa_id
+  display_name = "GKE Workload Identity Service Account"
+  description  = "Service account for GKE workloads with access to Artifact Registry, Cloud SQL, and Redis"
+
+  # IAM roles for required GCP services
+  roles = [
+    "roles/artifactregistry.reader", # Pull Docker images and Helm charts
+    "roles/artifactregistry.writer", # Push Docker images (if needed)
+    "roles/cloudsql.client",         # Connect to Cloud SQL instances
+    "roles/redis.editor",            # Access to Cloud Memorystore Redis
+  ]
+
+  # Workload Identity configuration
+  enable_workload_identity   = true
+  workload_identity_bindings = var.workload_identity_bindings
+
+  depends_on = [module.gke]
+}

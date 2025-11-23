@@ -15,11 +15,26 @@ resource "google_project_iam_member" "roles" {
   member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
-# Workload Identity Binding
+# Workload Identity Bindings (multiple namespaces)
+locals {
+  # Use the new bindings list if provided, otherwise fall back to single namespace/sa config
+  workload_identity_bindings = length(var.workload_identity_bindings) > 0 ? var.workload_identity_bindings : (
+    var.enable_workload_identity && var.workload_identity_sa_name != "" ? [
+      {
+        namespace            = var.workload_identity_namespace
+        service_account_name = var.workload_identity_sa_name
+      }
+    ] : []
+  )
+}
+
 resource "google_service_account_iam_member" "workload_identity_binding" {
-  count = var.enable_workload_identity ? 1 : 0
+  for_each = var.enable_workload_identity ? {
+    for binding in local.workload_identity_bindings :
+    "${binding.namespace}/${binding.service_account_name}" => binding
+  } : {}
 
   service_account_id = google_service_account.service_account.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.workload_identity_namespace}/${var.workload_identity_sa_name}]"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${each.value.namespace}/${each.value.service_account_name}]"
 }

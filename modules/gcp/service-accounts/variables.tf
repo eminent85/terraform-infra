@@ -33,13 +33,22 @@ variable "enable_workload_identity" {
 }
 
 variable "workload_identity_namespace" {
-  description = "Kubernetes namespace for Workload Identity binding"
+  description = "Kubernetes namespace for Workload Identity binding (used when workload_identity_bindings is empty)"
   type        = string
   default     = "default"
 }
 
 variable "workload_identity_sa_name" {
-  description = "Kubernetes service account name for Workload Identity binding"
+  description = "Kubernetes service account name for Workload Identity binding (used when workload_identity_bindings is empty)"
   type        = string
   default     = ""
+}
+
+variable "workload_identity_bindings" {
+  description = "List of Kubernetes namespace/service account pairs for Workload Identity bindings. If provided, this takes precedence over workload_identity_namespace and workload_identity_sa_name."
+  type = list(object({
+    namespace            = string
+    service_account_name = string
+  }))
+  default = []
 }

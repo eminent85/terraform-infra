@@ -62,6 +62,17 @@ output "get_credentials_command" {
   value       = "gcloud container clusters get-credentials ${module.gke.cluster_name} --region ${var.region} --project ${var.project_id}"
 }
 
+# Workload Identity Outputs
+output "workload_identity_sa_email" {
+  description = "Email of the workload identity service account"
+  value       = module.workload_identity_sa.email
+}
+
+output "workload_identity_bindings" {
+  description = "List of Kubernetes namespace/service account bindings configured for workload identity"
+  value       = module.workload_identity_sa.workload_identity_bindings
+}
+
 # Quick Start Instructions
 output "quick_start" {
   description = "Quick start instructions"
@@ -104,5 +115,32 @@ output "quick_start" {
 
     Istio Ingress IP: ${module.gke.istio_ingress_ip}
     Environment: DEV
+
+    === Workload Identity Setup ===
+
+    6. Create Kubernetes service accounts with workload identity annotation:
+       %{for binding in var.workload_identity_bindings~}
+       kubectl create namespace ${binding.namespace} --dry-run=client -o yaml | kubectl apply -f -
+       kubectl create serviceaccount ${binding.service_account_name} -n ${binding.namespace} --dry-run=client -o yaml | kubectl apply -f -
+       kubectl annotate serviceaccount ${binding.service_account_name} \
+         --namespace ${binding.namespace} \
+         iam.gke.io/gcp-service-account=${module.workload_identity_sa.email} --overwrite
+       %{endfor~}
+
+    7. Use the service account in your deployments:
+       spec:
+         serviceAccountName: <service-account-name>
+
+    The service account has access to:
+    - Artifact Registry (read/write for Docker images and Helm charts)
+    - Cloud SQL (client access)
+    - Cloud Memorystore Redis (editor access)
+
+    GCP Service Account: ${module.workload_identity_sa.email}
+
+    Configured bindings:
+    %{for binding in var.workload_identity_bindings~}
+    - ${binding.namespace}/${binding.service_account_name}
+    %{endfor~}
   EOT
 }

@@ -199,3 +199,24 @@ variable "gke_registry_sa_k8s_name" {
   type        = string
   default     = "registry-sa"
 }
+
+# Workload Identity Service Account Configuration
+variable "workload_identity_sa_id" {
+  description = "Service account ID for GKE workload identity"
+  type        = string
+  default     = "gke-workload-identity"
+}
+
+variable "workload_identity_bindings" {
+  description = "List of Kubernetes namespace/service account pairs for workload identity bindings"
+  type = list(object({
+    namespace            = string
+    service_account_name = string
+  }))
+  default = [
+    {
+      namespace            = "default"
+      service_account_name = "workload-identity-sa"
+    }
+  ]
+}

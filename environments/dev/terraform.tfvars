@@ -51,3 +51,23 @@ gke_preemptible_nodes = true        # Use preemptible nodes for cost savings
 gke_enable_network_policy     = true
 gke_release_channel           = "RAPID" # Get latest features faster in dev
 gke_enable_managed_prometheus = false   # Disabled to save costs
+
+# Workload Identity Configuration
+workload_identity_bindings = [
+  {
+    namespace            = "dev"
+    service_account_name = "workload-identity-sa"
+  },
+  {
+    namespace            = "default"
+    service_account_name = "workload-identity-sa"
+  },
+  {
+    namespace            = "cert-manager"
+    service_account_name = "cert-manager-sa"
+  },
+  {
+    namespace            = "external-dns"
+    service_account_name = "external-dns-sa"
+  }
+]
