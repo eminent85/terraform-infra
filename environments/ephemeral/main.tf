@@ -79,6 +79,11 @@ module "gke" {
   enable_gateway_api        = var.enable_gateway_api
   enable_backup_agent       = false
 
+  # Registry service account for pulling containers and Helm charts
+  create_registry_sa    = var.create_registry_sa
+  registry_sa_namespace = var.registry_sa_namespace
+  registry_sa_k8s_name  = var.registry_sa_k8s_name
+
   # Labels for resource management
   cluster_labels = merge(
     var.additional_labels,
@@ -117,27 +122,18 @@ module "bastion" {
   depends_on = [module.network]
 }
 
-# Workload Identity binding for test service accounts
-resource "google_service_account" "test_workload_sa" {
-  count = var.create_test_service_account ? 1 : 0
+# Workload Identity service account for test workloads
+module "test_service_account" {
+  count  = var.create_test_service_account ? 1 : 0
+  source = "../../modules/gcp/service-accounts"
 
+  project_id   = var.project_id
   account_id   = "${var.environment_name}-test-sa"
   display_name = "Service Account for ${var.environment_name} test workloads"
-  project      = var.project_id
-}
 
-resource "google_project_iam_member" "test_workload_permissions" {
-  for_each = var.create_test_service_account ? toset(var.test_sa_roles) : toset([])
+  roles = var.test_sa_roles
 
-  project = var.project_id
-  role    = each.value
-  member  = "serviceAccount:${google_service_account.test_workload_sa[0].email}"
-}
-
-resource "google_service_account_iam_member" "workload_identity_binding" {
-  count = var.create_test_service_account ? 1 : 0
-
-  service_account_id = google_service_account.test_workload_sa[0].name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.test_k8s_namespace}/${var.test_k8s_sa_name}]"
+  enable_workload_identity    = true
+  workload_identity_namespace = var.test_k8s_namespace
+  workload_identity_sa_name   = var.test_k8s_sa_name
 }

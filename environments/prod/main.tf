@@ -88,19 +88,24 @@ module "gke" {
   ]
 
   # Node pool configuration
-  node_count       = var.gke_node_count
-  min_node_count   = var.gke_min_node_count
-  max_node_count   = var.gke_max_node_count
-  machine_type     = var.gke_machine_type
-  disk_size_gb     = var.gke_disk_size_gb
+  node_count        = var.gke_node_count
+  min_node_count    = var.gke_min_node_count
+  max_node_count    = var.gke_max_node_count
+  machine_type      = var.gke_machine_type
+  disk_size_gb      = var.gke_disk_size_gb
   preemptible_nodes = var.gke_preemptible_nodes
 
   # Features
-  enable_network_policy    = var.gke_enable_network_policy
-  enable_gateway_api       = true
-  create_ingress_ip        = true
-  release_channel          = var.gke_release_channel
+  enable_network_policy     = var.gke_enable_network_policy
+  enable_gateway_api        = true
+  create_ingress_ip         = true
+  release_channel           = var.gke_release_channel
   enable_managed_prometheus = var.gke_enable_managed_prometheus
+
+  # Registry service account for pulling containers and Helm charts
+  create_registry_sa    = var.gke_create_registry_sa
+  registry_sa_namespace = var.gke_registry_sa_namespace
+  registry_sa_k8s_name  = var.gke_registry_sa_k8s_name
 
   cluster_labels = var.labels
 

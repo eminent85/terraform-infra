@@ -65,7 +65,7 @@ output "get_credentials_command" {
 # Quick Start Instructions
 output "quick_start" {
   description = "Quick start instructions"
-  value = <<-EOT
+  value       = <<-EOT
 
     === PRODUCTION Environment - Quick Start Guide ===
 

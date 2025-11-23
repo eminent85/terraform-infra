@@ -228,3 +228,22 @@ variable "create_ingress_ip" {
   type        = bool
   default     = true
 }
+
+# Registry Service Account variables
+variable "create_registry_sa" {
+  description = "Whether to create a service account for pulling from Artifact Registry"
+  type        = bool
+  default     = false
+}
+
+variable "registry_sa_namespace" {
+  description = "Kubernetes namespace for the registry service account"
+  type        = string
+  default     = "default"
+}
+
+variable "registry_sa_k8s_name" {
+  description = "Kubernetes service account name that will use the GCP service account"
+  type        = string
+  default     = "registry-sa"
+}

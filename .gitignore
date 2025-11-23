@@ -26,6 +26,4 @@ terraform.rc
 .terraform.lock.hcl
 **/.claude/*
 CLAUD.md
-
-**/.secrets/*
-.secrets/
+.secrets

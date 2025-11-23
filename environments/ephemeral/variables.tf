@@ -216,3 +216,22 @@ variable "test_k8s_sa_name" {
   type        = string
   default     = "test-sa"
 }
+
+# Registry Service Account Configuration
+variable "create_registry_sa" {
+  description = "Create a service account for pulling from Artifact Registry"
+  type        = bool
+  default     = false
+}
+
+variable "registry_sa_namespace" {
+  description = "Kubernetes namespace for the registry service account"
+  type        = string
+  default     = "default"
+}
+
+variable "registry_sa_k8s_name" {
+  description = "Kubernetes service account name that will use the GCP registry service account"
+  type        = string
+  default     = "registry-sa"
+}
