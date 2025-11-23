@@ -36,7 +36,7 @@ istio_version = "1.20.2"
 # GKE Cluster Configuration - Cost optimized
 cluster_name                = "gke-cluster-dev"
 gke_regional                = false # Zonal cluster for cost savings
-gke_master_ipv4_cidr_block  = "172.16.0.0/28"
+gke_master_ipv4_cidr_block = "172.16.0.0/28"
 gke_enable_private_endpoint = false
 
 # GKE Node Pool Configuration - Small, preemptible nodes
