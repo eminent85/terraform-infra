@@ -213,10 +213,5 @@ variable "workload_identity_bindings" {
     namespace            = string
     service_account_name = string
   }))
-  default = [
-    {
-      namespace            = "default"
-      service_account_name = "workload-identity-sa"
-    }
-  ]
+  default = []
 }

@@ -55,19 +55,19 @@ gke_enable_managed_prometheus = false   # Disabled to save costs
 # Workload Identity Configuration
 workload_identity_bindings = [
   {
-    namespace            = "dev"
-    service_account_name = "workload-identity-sa"
-  },
-  {
     namespace            = "default"
     service_account_name = "workload-identity-sa"
   },
   {
-    namespace            = "cert-manager"
-    service_account_name = "cert-manager-sa"
+    namespace            = "flux-system"
+    service_account_name = "source-controller"
   },
   {
-    namespace            = "external-dns"
-    service_account_name = "external-dns-sa"
+    namespace            = "external-secrets"
+    service_account_name = "external-secrets"
+  },
+  {
+    namespace            = "external-secrets"
+    service_account_name = "gcp-secretstore"
   }
 ]
